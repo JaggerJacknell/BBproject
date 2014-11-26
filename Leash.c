@@ -1,3 +1,4 @@
+
 /**
 * Initialise l'écran du LEASH et affiche le prompt
 */
@@ -53,8 +54,67 @@ void separateCommand()
 
 int existCommand()
 {
-  if strcmp(commandArgv[0],Listtemp[]==0)
-  {
-    return 0;
-  }  
+  for(int j=0;j<MAX;j++) {
+    if strcmp(commandArgv[0],strings[j]==0) {
+      return 1;
+    }
+  }
+}
+
+
+void execCommand()
+{
+  pid_t pid;
+  struct sigaction sig;
+  /* Avant de lancer la commande dans le fork(), on va appeler sigaction.
+  On va donc désactiver le CTRL-C.*/
+  signal(SIGINT, SIG_IGN); //on ignore le CTRL-C...
+
+  if (fork()<0) {
+    perror("Le processus fils n'a pas été crée")
+  }
+	if (fork()==0) { //lorsqu'on se trouve dans le fils...
+    signal(SIGINT, SIG_DFL); //on réactive le CTRL-C
+    signal(SIGINT, handle_signal);//on l'envoie au handler
+		if (existCommand()==1){
+			i = execvp(commandArgv[0],commandArgv);
+      if(i<0){
+        printf("%s : %s\n", commandArgv[0], "La commande n'existe pas ou n'est pas permise");
+        exit(1);
+      }
+		}
+
+} else {
+  wait_l(pid);
+  signal(SIGINT, SIG_DFL); //on réactive le CTRL-C
+  signal(SIGINT, handle_signal);//on l'envoie au handler
+}
+}
+
+void wait_l(pid_t pid)
+{
+  int status;
+  while (waitpid(pid,&status,0)<0)
+    {
+
+        if (WIFEXITED(status))
+        {
+            if(WEXITSTATUS(status)==0)
+                printf("Le fils s'est terminé normalement avec le code 0 \n");
+            else
+            {
+                continue;
+                printf("Le fils s'est terminé avec le code %i",WEXITSTATUS(status));
+            }
+        }
+        else
+            printf("Terminaison par le signal %i\n",WTERMSIG(status));
+        break;
+    }
+}
+
+void handle_signal(int signo)
+{
+  printf("\n[$LEASH] "); //On affiche le prompt
+  fflush(stdout); //fflush s'assure que le Shell affiche bien le prompt directement même si le buffer n'est pas plein
 }
