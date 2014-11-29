@@ -9,13 +9,13 @@
 int main(int argc, char *argv[]) {
 
 int i;
-char* args[5];
+char* args[7];
 args[0] = "tar";
 args[1] = "xzvf";
 args[2] = argv[1];
 args[3] = "-C";
-//args[4] = argv[2];
-args[4] = NULL;
+args[4] = argv[2];
+args[5] = NULL;
 
 FILE *fp;
 char *line = NULL;
@@ -27,7 +27,7 @@ char *strings[MAX]; //tableau dans lequel on va enregistrer les commandes possib
 
 
 mode_t mask = umask(0); //on met le umask à 0 (pas de restrictions)
-int result_code = mkdir("proji",0700); //on crée le répertoire
+int result_code = mkdir("lol",0700); //on crée le répertoire
 umask(mask); //on remet les droits initiaux
 
   if(result_code ==-1) {
@@ -40,7 +40,7 @@ umask(mask); //on remet les droits initiaux
 
     printf("Le répertoire a bien été crée \n");
 
-    int fx = execv(args[0],args); //on exécute le programme tar pour décompresser le fichier
+    int fx = execvp(args[0],args); //on exécute le programme tar pour décompresser le fichier
 
 	if(fx==-1){
 		printf("La décompression de l'archive n'a pas été possible\n");
