@@ -56,7 +56,7 @@ umask(mask); //on remet les droits initiaux
           }
      }
      else {                                 
-          while (wait(&status) != pid)       /* wait for completion  */
+          while (wait(&status) != pid)       
                ;
      }
 
