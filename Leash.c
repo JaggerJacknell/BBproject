@@ -18,7 +18,8 @@ void Init()
  */
 
 void cleanCommand()  //cleanCommand permet de nettoyer le tableau des commandes
-{
+{                     //commandArgc est le nombre de commandes de l'utilisateur
+                      //commandargv[] est le tableau qui contient les commandes de l'utilisateur
   while (commandArgc != 0) {    //tant que l'on a des commandes dans le tableau
 
          commandArgv[commandArgc] = NULL;  //on supprimme le pointeur sur la commande
@@ -73,12 +74,14 @@ void execCommand()
   if (fork()<0) {
     perror("Le processus fils n'a pas été crée")
   }
-	if (fork()==0) { //lorsqu'on se trouve dans le fils...
-    signal(SIGINT, SIG_DFL); //on réactive le CTRL-C
-    signal(SIGINT, handle_signal);//on l'envoie au handler
-		if (existCommand()==1){
-			i = execvp(commandArgv[0],commandArgv);
-      if(i<0){
+	if (fork()==0) {                            //lorsqu'on se trouve dans le fils...
+    signal(SIGINT, SIG_DFL);                  //on réactive le CTRL-C
+    signal(SIGINT, handle_signal);            //on l'envoie au handler
+		if (existCommand()==1){                   //si la commande passée par l'utilisateur est permise...
+			i = execvp(commandArgv[0],commandArgv); //...alors on l'exécute
+      add_history(commandArgv[0]);             //et on l'ajoute à l'historique des commandes
+
+      if(i<0){                                //sinon, si la commande n'existe pas
         printf("%s : %s\n", commandArgv[0], "La commande n'existe pas ou n'est pas permise");
         exit(1);
       }
