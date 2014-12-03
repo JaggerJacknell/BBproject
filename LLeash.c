@@ -135,7 +135,6 @@ void execCommand()
         }
         else
         {
-            // attendre que fils ait fini
             wait_l(pid);
         }
 
@@ -213,7 +212,7 @@ int main(int argc, char *argv[])
                 ;
         }
 
-        fp = fopen("/home/kejji/proj/proji/lol/meta", "r"); //on ouvre le fichier à lire dans fp
+        fp = fopen("./lol/meta", "r"); //on ouvre le fichier à lire dans fp
         if (fp == NULL)
         {
             fprintf(stderr, "Erreur dans l'ouverture du fichier\n");
@@ -224,8 +223,6 @@ int main(int argc, char *argv[])
         while ((read = getline(&line, &len, fp)) != -1)   //getline() fait un malloc automatique pour line
         {
 
-            printf("On récupère une ligne de taille %zu :\n", read);
-            printf("%s", line);
             if(strchr(line,'#') != NULL)
             {
 
@@ -233,9 +230,7 @@ int main(int argc, char *argv[])
 
             else if (strchr(line,'$') != NULL)
             {
-                strings[i] = strdup(line);
-
-                //printf("%s",strings[i]);  strdup s'occupe déja d'écrire
+                strings[i] = strdup(line+2);
 
                 i++;
 
@@ -269,8 +264,7 @@ int main(int argc, char *argv[])
         getCommand();
         separateCommand(); //(ligne, elems, MAXELEMS);
 
-        if (existCommand()==1) // si cette commande est valide, l'exécuter sinon
-            // inviter le joueur à reintroduire une autre commande
+        if (existCommand()==1) // si cette commande est valide, l'exécuter sinn inviter le joueur à reintroduire une autre commande
         {
             printf("lol_99\n");
             execCommand();
