@@ -1,0 +1,14 @@
+all: projetLeash
+
+projetLeash: ProjetLeashFinal.o 
+		gcc -o projetLeash ProjetLeashFinal.o 
+
+ProjetLeashFinal.o: ProjetLeashFinal.c headers.h Tools.h
+		gcc -o ProjetLeashFinal.o -c ProjetLeashFinal.c -Wall 
+
+
+clean:
+	rm -f *.o core
+
+mrproper: clean
+	rm -f mon_executable

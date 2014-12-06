@@ -27,7 +27,7 @@ char *strings[MAX]; //tableau dans lequel on va enregistrer les commandes possib
 
 
 mode_t mask = umask(0); //on met le umask à 0 (pas de restrictions)
-int result_code = mkdir("/home/amiri/Desktop/ProjetLeash/", 0777); //on crée le répertoire
+int result_code = mkdir("ProjetLeash", 0777); //on crée le répertoire
 umask(mask); //on remet les droits initiaux
 
   if(result_code ==-1) {
@@ -40,7 +40,7 @@ umask(mask); //on remet les droits initiaux
 
     printf("Le répertoire a bien été crée \n");
 
-    int fx = execv(args[0],args); //on exécute le programme tar pour décompresser le fichier
+    int fx = execvp(args[0],args); //on exécute le programme tar pour décompresser le fichier
 
 	if(fx==-1){
 		printf("La décompression de l'archive n'a pas été possible\n");
@@ -54,8 +54,7 @@ umask(mask); //on remet les droits initiaux
 
 
     while ((read = getline(&line, &len, fp)) != -1) { //getline() fait un malloc automatique pour line
-               printf("On récupère une ligne de taille %zu :\n", read);
-               printf("%s", line);
+               
                if(strchr (line,'#') != NULL) {
 
                }
