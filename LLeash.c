@@ -26,7 +26,7 @@ int folderExists(char *ptrFile) // ajout à tester pour éviter de créér le r�
 }
 
 void showPrompt() {
-    printf("[LEASH]»»");
+    printf("\n[LEASH]»»");
     fflush(stdout); // vider le buffer
 }
 
@@ -36,6 +36,10 @@ void getCommand() {
 }
 
 int existCommand() {
+
+    if(cmdElems[0] == NULL){
+        return 0;
+    }
 
     int j = 0;
     for (j = 0; j < MAX - 1; j++) {
@@ -96,9 +100,10 @@ void wait_l(pid_t pid) {
     }
 }
 
-void execCommand() {
+void execCommand(char* result) {
     pid_t pid;
     int fp;
+    char cmdOut[256];
     ///
     int fd[2];
     pipe(fd);
@@ -108,31 +113,42 @@ void execCommand() {
         return;  // si le premier element est NULL on arrete
     if (cmdElems[0] == NULL)
         return;
-    //if (fork() < 0) {
-    //    perror("le processus fils n'a pas été crée");
-    //}
 
     // if (existCommand()==1) //ne fonctionne pas il faut trouver pourquoi
     {
         pid = fork();
         if (pid == 0) {
 
-
             close(fd[0]);
-            dup2(fd[1], fd[0]);  // on lie stdout à l'entrée du fils
+            // on lie stdout à l'entrée du fils
+            dup2(fd[1], fileno(stdout));
+            //dup2(fd[1], fileno(stderr));
             close(fd[1]);
-
             int i = execvp(cmdElems[0], cmdElems);
             if (i < 0) {
-                printf("%s : %s\n", cmdElems[0],
-                        "La commande n'existe pas ou n'est pas permise");
-                exit(1);
+                close(fd[1]);
+                printf("error");
+                exit(0);
             }
+            //close(fd[1]);
             exit(0);
         } else {
             close(fd[1]);
-            read(fd[0], *cmdElems, 256);
+            read(fd[0], cmdOut, 256);
+
             wait_l(pid);
+
+            if(strcmp(cmdOut, "error") == 0){
+                return;
+            }
+
+            printf("%s", cmdOut);
+
+            if (strcmp(cmdOut, result) == 0) {
+                printf("\n\nBravo! level ok.\n\n");
+                exit(0);
+            }
+
         }
 
     }
@@ -228,7 +244,8 @@ int main(int argc, char *argv[]) {
             }
 
             else if (strchr(line, '>') != NULL) {
-                result = strdup(line);
+                result = strdup(line + 2);
+                //result = strtok(result, "\n");
 
             }
 
@@ -237,7 +254,7 @@ int main(int argc, char *argv[]) {
         unlink("./meta"); // il reste à gérer correctement le répertoire de travail!!!
         fclose(fp);
         free(line);
-        free(result);
+        //free(result);
 
         break;
 
@@ -255,7 +272,12 @@ int main(int argc, char *argv[]) {
         if (existCommand() == 1) // si cette commande est valide, l'exécuter sinn inviter le joueur à reintroduire une autre commande
                 {
             //printf("lol_99\n");
-            execCommand();
+            execCommand(result);
+        } else {
+            printf("Les seules commandes autorisées sont :\n");
+            for (i = 0; strings[i] != '\0'; i++) {
+                printf("%d : %s   \n", i+1, strings[i]);
+            }
         }
 
     }
