@@ -33,7 +33,7 @@ int main(){
 		
 		if (execvp(CommArgv1)==0) {
 			execvp(CommArgv2);
-			result=1;
+			result=0;
 		}
 		
 		exit(result);
