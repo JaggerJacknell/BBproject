@@ -1,4 +1,3 @@
-
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,6 +9,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #define MAX 200
 char *strings[MAX]; //tableau dans lequel on va enregistrer les commandes possibles pour l'utilisateur
@@ -26,13 +27,18 @@ int folderExists(char *ptrFile) // ajout à tester pour éviter de créér le r�
 }
 
 void showPrompt() {
-    printf("\n[LEASH]»»");
-    fflush(stdout); // vider le buffer
+    //printf("\n[LEASH]»»");
+    //fflush(stdout); // vider le buffer
 }
 
 void getCommand() {
-    fgets(cmdLine, sizeof(cmdLine), stdin);
+    char* lineRead = readline("\n[LEASH]»");
+    if (lineRead && *lineRead){
+        add_history (lineRead);
+    }
 
+    //fgets(cmdLine, sizeof(cmdLine), stdin);
+    strcpy(cmdLine, lineRead);
 }
 
 int existCommand() {
@@ -50,6 +56,21 @@ int existCommand() {
             return 1;
         }
     }
+}
+
+int isExitCommand() {
+        if (strcmp(cmdElems[0], "exit") == 0) {
+            return 1;
+        }
+        return 0;
+}
+
+
+int isPwdCommand() {
+    if (strcmp(cmdElems[0], "pwd") == 0) {
+                return 1;
+            }
+            return 0;
 }
 
 void separateCommand() {
@@ -136,7 +157,7 @@ void execCommand(char* result) {
             close(fd[1]);
             read(fd[0], cmdOut, 256);
 
-            wait_l(pid);
+            waitpid(pid,0,0);
 
             if(strcmp(cmdOut, "error") == 0){
                 return;
@@ -269,6 +290,20 @@ int main(int argc, char *argv[]) {
         getCommand();
         separateCommand(); //(ligne, elems, MAXELEMS);
 
+        if(isPwdCommand() == 1){
+           char cwd[1024];
+           if (getcwd(cwd, sizeof(cwd)) != NULL){
+               printf("%s\n", cwd);
+           }else{
+               printf("Error while getting cwd");
+           }
+           continue;
+        }
+
+        if(isExitCommand() == 1){
+            exit(0);
+        }
+
         if (existCommand() == 1) // si cette commande est valide, l'exécuter sinn inviter le joueur à reintroduire une autre commande
                 {
             //printf("lol_99\n");
@@ -276,7 +311,7 @@ int main(int argc, char *argv[]) {
         } else {
             printf("Les seules commandes autorisées sont :\n");
             for (i = 0; strings[i] != '\0'; i++) {
-                printf("%d : %s   \n", i+1, strings[i]);
+                printf("%d : %s   \n", i, strings[i]);
             }
         }
 
