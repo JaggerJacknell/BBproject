@@ -1,4 +1,4 @@
-#include "headers.h"
+#include "headers2.h"
 #include "Tools.h"
 
 /**
@@ -11,94 +11,130 @@ void Init()
     printf("\tWelcome to LEASH ! Have Fun \n");
     printf("-------------------------------------------------\n");
     printf("\n\n");
-    printf("\n[$LEASH] "); //On affiche le prompt
+    
 }
 
 //Permet l'initialisation des fonctions readline (notamment pour l'historique des commandes et la fonction TAB)
-initialize_readline ()
+void initialize_readline ()
 {
 
   rl_readline_name = "Leash";
   rl_attempted_completion_function = command_completion;
+  
+
 }
 
 //permet de lire les commandes de l'utilisateur en utilisant la fonction getchar();
 void getCommand()
-{
-        cleanCommand();                                                // nettoie le tableau des commandes
-        while ((c != '\n') && (buffin < BUFFER_MAX_LENGTH)) {     //tant que l'on n'a pas appuyer sur Entree et que le buffer n'est pas plein...
-                buffer[buffin++] = c;                             //...on stocke les char dans le buffer
-                c = getchar();
+{		
+		 
+  //cleanCommand();                // nettoie le tableau des commandes
+  lineRead = readline("\n[$LEASH]");
+		
+	rl_bind_key ('\t', rl_complete);
+	
+			
+  if (lineRead && *lineRead){
+		add_history (lineRead);
         }
-        buffer[buffin] = 0x00;                                    // lorsqu'on interrompt le stockage on met null en fin de buffer
-        separateCommand();
+        
+  strcpy(cmdLine, lineRead);                                 
+        
+	
 }
 
-//check si la fonction existe en comparant les commandes entrées par l'utilisateur avec le tableau des commandes du fichier meta
-int existCommand()
+
+void handleUserCommand()
 {
-  int j;
-  for(j=0;j<MAX;j++) {
-    if (strcmp(commandArgv[0],strings[j]==0)) {
-      return 1;
+        if (processCommand() == 0) { //si la commande n'est pas une built-in commande, alors on lance ça en foreground
+                if(existCommand() == 1) {
+                    execCommand(result);
+                  }
+
+                else {
+
+                  printf("Les seules commandes autorisées sont :\n");
+                  for (i = 0; strings[i] != '\0'; i++) {
+                      printf("%d : %s   \n", i, strings[i]);
+                }
+        }
     }
-  }
-  return 0;
 }
 
 
 //Cette fonction permet la gestion des pipes et des redirections
 //Si l'on trouve un ">", "<", ou encore "|", on appelle la fonction associée
+/**
+ * built-in commands: exit, in, out, bg, fg, jobs, kill
+ * 
+ */
 
 int processCommand() {
 
-  int i;
 
-
-  for(i=0;i<commandArgc; i++) {                  //on parcourt le tableau qui contient les commandes de l'utilisateur...
+  for(i=0;i<MAX-1; i++) {                  //on parcourt le tableau qui contient les commandes de l'utilisateur...
     if(strcmp(commandArgv[i], ">") == 0) {       //s'il contient la redirection ">"...
-      return SuperiorCommand(i);                //...alors on lance la fonction SuperiorCommand();
-    }
+      SuperiorCommand(i);                //...alors on lance la fonction SuperiorCommand();
+      return 1;
+    } 
     else if(strcmp(commandArgv[i], "<") == 0) {  //s'il contient la redirection "<"...
-      return InferiorCommand(i);                 //...alors on lance la fonction InferiorCommand();
-
+      InferiorCommand(i);                 //...alors on lance la fonction InferiorCommand();
+	  return 1;
     }
     else if(strcmp(commandArgv[i], "|") == 0) {   //s'il contient la redirection "|"...
-        return PipeCommand(i);                    //...alors on lance la fonction PipeCommand();
+      PipedCommand(i);                    //...alors on lance la fonction PipeCommand();
+	  return 1;
     }
-  }
-  return excuteCommand();
-}
+    else if(strcmp(commandArgv[i], "fg") == 0) {   //s'il contient le signe "fg"...
+        if (commandArgv[1] == NULL)
+          return 0;
 
-//permet tout simplement d'exécuter les commandes rentrées par l'utilisateur
-void execCommand()
-{ int i;
-  pid_t pid;
-  struct sigaction sig;
-  /* Avant de lancer la commande dans le fork(), on va appeler sigaction.
-  On va donc désactiver le CTRL-C.*/
-  signal(SIGINT, SIG_IGN); //on ignore le CTRL-C...
+        int jobId = (int) atoi(commandArgv[1]);
+        t_job* job = getJob(jobId, BY_JOB_ID);
 
-  if (fork()<0) {
-    perror("Le processus fils n'a pas été crée");
-  }
-  if (fork()==0) {                            //lorsqu'on se trouve dans le fils...
-    signal(SIGINT, SIG_DFL);                  //on réactive le CTRL-C
-    signal(SIGINT, handle_signal);            //on l'envoie au handler
-    if (existCommand()==1){                   //si la commande passée par l'utilisateur est permise...
-      i = execvp(commandArgv[0],commandArgv); //...alors on l'exécute
-      add_history(commandArgv[0]);             //et on l'ajoute à l'historique des commandes
+        if (job == NULL)
+          return 0;
 
-      if(i<0){                                //sinon, si la commande n'existe pas
-        printf("%s : %s\n", commandArgv[0], "La commande n'existe pas ou n'est pas permise");
-        exit(1);
-      }
+        if (job->status == SUSPENDED || job->status == WAITING_INPUT)
+          putJobForeground(job, TRUE);
+        else                                                  
+          putJobForeground(job, FALSE);
+        return 1;                    
     }
+    else if(strcmp(commandArgv[i], "bg") == 0) {   //s'il contient le signe "bg"...
+        if (commandArgv[1] == NULL)
+          return 0;
 
-} else {
-  wait_l(pid);
-  signal(SIGINT, SIG_DFL); //on réactive le CTRL-C
-  signal(SIGINT, handle_signal);//on l'envoie au handler
+        else
+          launchJob(commandArgv + 1, 0, BACKGROUND);
+        return 1;
+    }
+    else if(strcmp(commandArgv[i], "jobs") == 0) {   //s'il contient le signe "jobs"...
+        printJobs();
+        return 1;
+    }
+    else if(strcmp(commandArgv[i], "kill") == 0) {   //s'il contient le signe "kill"...
+        if (commandArgv[1] == NULL)
+          return 0;
+        killJob(atoi(commandArgv[1]));
+        return 1;
+    }
+    else if (strcmp(commandArgv[i], "cd") == 0) {
+
+        handleCdCommand();
+        continue;
+        return 1;
+    }
+    else if (strcmp(commandArgv[i], "exit") == 0) {
+         exit(EXIT_SUCCESS);
+    }
+    else if (strcmp(commandArgv[i], "pwd") == 0) {
+		handlePwdCommand();
+        continue;
+        return 1;
+	}
+
+  return 0;
 }
 }
 
@@ -109,41 +145,77 @@ void execCommand()
  */
 
 
-
 int main(int argc, char* argv[])
-{
+{	
 
+	args[0] = "tar";
+	args[1] = "xzvf";
+	args[2] = argv[1];
+	args[3] = "-C";
+	args[4] = "./ProjetLeash";
+	args[5] = NULL;
 
 
     Init();
-    mode_t mask = umask(0); //on met le umask à 0 (pas de restrictions)
-    int result_code = mkdir("ProjetLeash", 0777); //on crée le répertoire
-    umask(mask); //on remet les droits initiaux
 
-      if(result_code ==-1) {
+    if(!(folderExists("ProjetLeash"))) {
+
+      mode_t mask = umask(0); //on met le umask à 0 (pas de restrictions)
+      result_code = mkdir("ProjetLeash", 0777); //on crée le répertoire
+      umask(mask); //on remet les droits initiaux
+    } else {
+
+      result_code = 0;
+    }
+    
+    switch (result_code) {
+
+      case -1 : 
         perror(argv[0]);
         printf("Erreur dans la création du répertoire \n");
         exit(EXIT_FAILURE);
-      }
-
-      if(result_code==0){
-
+        break;
+        
+      case 0 :
+      
         printf("Le répertoire a bien été crée \n");
 
-        int fx = execvp(args[0],args); //on exécute le programme tar pour décompresser le fichier
+        if((pid = fork()) < 0) {
 
-        if(fx==-1){
-        printf("La décompression de l'archive n'a pas été possible\n");
-      }
+          printf("Erreur dans le fork\n");
+          exit(1);
+	  }
+        
+        else if (pid == 0) {
 
-        fp = fopen("/home/amiri/Desktop/ProjetLeash/meta", "r"); //on ouvre le fichier à lire dans fp
+          int fx = execvp(args[0],args); //on exécute le programme tar pour décompresser le fichier
+          if(fx<0) {
+            printf("La décompression de l'archive n'a pas été possible\n");
+            exit(1);
+          }
+
+        } else {
+          while (wait(&status) != pid)
+            ;
+        }
+
+        if (changeDir("./ProjetLeash/") != 0) {
+          printf("Erreur d'accès au répertoire\n");
+          exit(1);
+          break;
+        }
+
+        getcwd(rwd,sizeof(rwd));
+
+
+        fp = fopen("./meta", "r"); //on ouvre le fichier à lire dans fp
         if (fp == NULL) {
                   fprintf(stderr, "Erreur dans l'ouverture du fichier\n");
                   exit(EXIT_FAILURE);
         }
 
 
-        while ((read = getline(&line, &len, fp)) != -1) { //getline() fait un malloc automatique pour line
+        while ((reado = getline(&line, &lenth, fp)) != -1) { //getline() fait un malloc automatique pour line
 
                    if(strchr (line,'#') != NULL) {
 
@@ -151,6 +223,7 @@ int main(int argc, char* argv[])
 
                    else if (strchr (line,'$') != NULL) {
                      strings[i] = strdup(line+2);
+                     strings[i] = strtok(strings[i], "\n");
                      i++;
 
                    }
@@ -161,37 +234,33 @@ int main(int argc, char* argv[])
 
                }
 
-    unlink("meta");
+    
+    unlink("./meta");
     fclose(fp);
-    while(TRUE) {
+    free(line);
+    
+    break;
 
-
-      while(c != EOF) {                //tant que l'on n'a pas atteint EOF (gestion du CTRL-D)
-      c = getchar();
-      switch(c){
-      case '\n':                    //si l'on appuie sur Entree (commande vide)...
-              printf("[$LEASH] ");  //... alors on affiche le prompt directement
-              break;
-      default:
-                        initialize_readline();//on initialise le compléteur de commande
-                        getCommand();         // enregistre les commandes dans un tableau
-                        existCommand();       // vérifie si la commande existe
-                        processCommand();     // on check si le tableau contient des redirections ou pipes
-                        execCommand();        // execute la commande
-                        printf("\n[$LEASH] "); //On affiche le prompt
-                        break;
-                      }
-                    }
-                  }
-
+    
+default :
+    
+    break;
+    
+    
+  }
+    
+  while(TRUE) {
+		
+	
+    initialize_readline();//on initialise le compléteur de commande
+    getCommand();         // enregistre les commandes dans un tableau
+    separateCommand();
+    handleUserCommand();
+    
+}
     for(i=0;i<6;i++){
       free(args[i]);
     }
 
-    free(args);
-    free(strings);
-    free(line);
-    free(result);
-}
     return 0;
 }
