@@ -1,4 +1,3 @@
-
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,6 +9,8 @@
 #include <errno.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #define MAX 200
 char *strings[MAX]; //tableau dans lequel on va enregistrer les commandes possibles pour l'utilisateur
@@ -17,6 +18,7 @@ char *strings[MAX]; //tableau dans lequel on va enregistrer les commandes possib
 char cmdLine[1000];
 char *cmdElems[MAX]; // pointe sur les mots d'une ligne de commande
 int result_code;
+char rwd[1024];
 
 int folderExists(char *ptrFile) // ajout à tester pour éviter de créér le réprtoire lol deux fois!!!
 {
@@ -26,18 +28,23 @@ int folderExists(char *ptrFile) // ajout à tester pour éviter de créér le r�
 }
 
 void showPrompt() {
-    printf("\n[LEASH]»»");
-    fflush(stdout); // vider le buffer
+    //printf("\n[LEASH]»»");
+    //fflush(stdout); // vider le buffer
 }
 
 void getCommand() {
-    fgets(cmdLine, sizeof(cmdLine), stdin);
+    char* lineRead = readline("\n[LEASH]»");
+    if (lineRead && *lineRead) {
+        add_history(lineRead);
+    }
 
+    //fgets(cmdLine, sizeof(cmdLine), stdin);
+    strcpy(cmdLine, lineRead);
 }
 
 int existCommand() {
 
-    if(cmdElems[0] == NULL){
+    if (cmdElems[0] == NULL) {
         return 0;
     }
 
@@ -50,6 +57,27 @@ int existCommand() {
             return 1;
         }
     }
+}
+
+int isExitCommand() {
+    if (strcmp(cmdElems[0], "exit") == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int isPwdCommand() {
+    if (strcmp(cmdElems[0], "pwd") == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int isCdCommand() {
+    if (strcmp(cmdElems[0], "cd") == 0) {
+        return 1;
+    }
+    return 0;
 }
 
 void separateCommand() {
@@ -103,7 +131,7 @@ void wait_l(pid_t pid) {
 void execCommand(char* result) {
     pid_t pid;
     int fp;
-    char cmdOut[256];
+    char cmdOut[2048];
     ///
     int fd[2];
     pipe(fd);
@@ -134,30 +162,141 @@ void execCommand(char* result) {
             exit(0);
         } else {
             close(fd[1]);
-            read(fd[0], cmdOut, 256);
 
-            wait_l(pid);
+            memset(&cmdOut[0], 0, sizeof(cmdOut));
+            int n;
+            while (n = read(fd[0], cmdOut, 2048) > 0) {
+                if (strcmp(cmdOut, "error") == 0) {
+                    return;
+                }
 
-            if(strcmp(cmdOut, "error") == 0){
-                return;
+                printf("%s", cmdOut);
+
+                if (strcmp(cmdOut, result) == 0) {
+                    printf("\n\nBravo! level ok.\n\n");
+                    exit(0);
+                }
             }
 
-            printf("%s", cmdOut);
-
-            if (strcmp(cmdOut, result) == 0) {
-                printf("\n\nBravo! level ok.\n\n");
-                exit(0);
-            }
-
+            waitpid(pid, 0, 0);
         }
-
     }
-
 }
 
 int changeDir(char *dir) {
     //faire les bons tests comme quoi on ne sort pas du repertoire de travail
     return chdir(dir);
+}
+
+void handlePwdCommand() {
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        printf("%s\n", cwd);
+    } else {
+        printf("Error while getting cwd");
+    }
+}
+
+char* getRealPath(char* lastDir, char* curDir) {
+    pid_t pid;
+    char cmdOut[2048];
+    ///
+    int fd[2];
+    pipe(fd);
+    pid = fork();
+    if (pid == 0) {
+
+        close(fd[0]);
+        // on lie stdout à l'entrée du fils
+        dup2(fd[1], fileno(stdout));
+
+        close(fd[1]);
+
+        char newDir[2048];
+
+        strcpy(newDir, lastDir);
+        strcat(newDir, "/");
+        strcat(newDir, curDir);
+
+        changeDir(newDir);
+
+        char newChangedDir[2048];
+        getcwd(newChangedDir, sizeof(newChangedDir));
+        printf("%s", newChangedDir);
+
+        exit(0);
+    } else {
+        close(fd[1]);
+
+        memset(&cmdOut[0], 0, sizeof(cmdOut));
+        read(fd[0], cmdOut, 2048);
+
+        //printf("%s", cmdOut);
+
+        waitpid(pid, 0, 0);
+        return cmdOut;
+    }
+
+}
+
+int isValidDirectory(char* dir){
+    struct stat fileStat;
+        if(stat(dir,&fileStat) >= 0){
+            if(S_ISDIR(fileStat.st_mode) && (fileStat.st_mode & S_IWUSR)&&(fileStat.st_mode & S_IXUSR)){
+                return 1;
+            }
+        }
+    return 0;
+}
+
+int startsWith(const char *first, const char *second) {
+    size_t firstSize, secondSize;
+
+    firstSize = strlen(first);
+    secondSize = strlen(second);
+
+    if (secondSize <= firstSize && strncmp(first, second, secondSize) == 0) {
+        return 1;
+    }
+    return 0;
+}
+
+void handleCdCommand() {
+    char lastDir[1024];
+    getcwd(lastDir, sizeof(lastDir));
+
+    if (cmdElems[1] == NULL) {
+        changeDir(rwd);
+    } else {
+
+        char *currDir;
+
+        /* get the first token */
+        currDir = strtok(cmdElems[1], "/");
+
+        char* lastDirPtr = &lastDir[0];
+
+        /* walk through other tokens */
+        while (currDir != NULL) {
+            //printf(" %s\n", currDir);
+
+            lastDirPtr = getRealPath(lastDirPtr, currDir);
+
+            if(startsWith(lastDirPtr,rwd) != 1){ // on a quitté la racin du jeu.
+                printf("You can not leave the root directory!\n");
+                return;
+            }
+
+            if(isValidDirectory(lastDirPtr) !=1){ // on a vérifie le dossier
+                printf("No access rights on folder \n : %s\n",lastDir);
+                return;
+            }
+
+            currDir = strtok(NULL, "/");
+        }
+        changeDir(lastDirPtr);
+    }
+
 }
 
 int main(int argc, char *argv[]) {
@@ -223,6 +362,8 @@ int main(int argc, char *argv[]) {
             break;
         }
 
+        getcwd(rwd, sizeof(rwd));
+
         fp = fopen("./meta", "r"); //on ouvre le fichier à lire dans fp
         if (fp == NULL) {
             fprintf(stderr, "Erreur dans l'ouverture du fichier\n");
@@ -250,6 +391,7 @@ int main(int argc, char *argv[]) {
             }
 
         }
+        strings[i] = "cd";
 
         unlink("./meta"); // il reste à gérer correctement le répertoire de travail!!!
         fclose(fp);
@@ -269,6 +411,20 @@ int main(int argc, char *argv[]) {
         getCommand();
         separateCommand(); //(ligne, elems, MAXELEMS);
 
+        if (isPwdCommand() == 1) {
+            handlePwdCommand();
+            continue;
+        }
+
+        if (isCdCommand() == 1) {
+            handleCdCommand();
+            continue;
+        }
+
+        if (isExitCommand() == 1) {
+            exit(0);
+        }
+
         if (existCommand() == 1) // si cette commande est valide, l'exécuter sinn inviter le joueur à reintroduire une autre commande
                 {
             //printf("lol_99\n");
@@ -276,7 +432,7 @@ int main(int argc, char *argv[]) {
         } else {
             printf("Les seules commandes autorisées sont :\n");
             for (i = 0; strings[i] != '\0'; i++) {
-                printf("%d : %s   \n", i+1, strings[i]);
+                printf("%d : %s   \n", i, strings[i]);
             }
         }
 
