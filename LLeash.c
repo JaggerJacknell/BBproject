@@ -13,183 +13,224 @@
 #include <readline/history.h>
 
 #define MAX 200
-char *strings[MAX]; //tableau dans lequel on va enregistrer les commandes possibles pour l'utilisateur
 
+// List of allowed commands
+char *allowedCommands[MAX];
+
+// Entered command line
 char cmdLine[1000];
-char *cmdElems[MAX]; // pointe sur les mots d'une ligne de commande
-int result_code;
+
+// list of words in entered command line
+// (cmdElems[0] contains the command and cmdElems[>0] contains arguments of the command)
+char *cmdElems[MAX];
+
+// root working directory of the Game : we can not leave this directory
 char rwd[1024];
 
-int folderExists(char *ptrFile) // ajout à tester pour éviter de créér le réprtoire lol deux fois!!!
-{
-// Renvoie 1 si existe, 0 sinon
+// Check if a folder exists
+// This check is used before creating the Game working directory
+// to avoid the creation of an already created directory
+// If folder exist return 1
+// Else return 0
+int folderExists(char *ptrFile) {
     struct stat s;
     return (stat(ptrFile, &s) == 0);
 }
 
-void showPrompt() {
-    //printf("\n[LEASH]»»");
-    //fflush(stdout); // vider le buffer
-}
-
-void getCommand() {
+// This function is used to wait for user command input
+// Readline library is used
+void getCommand(void) {
+    // Wait for user input command
     char* lineRead = readline("\n[LEASH]»");
+
+    // Check that command is not empty
     if (lineRead && *lineRead) {
+        // Add input command to commands history
         add_history(lineRead);
     }
 
-    //fgets(cmdLine, sizeof(cmdLine), stdin);
+    // input command is copied to cmdLine variable
     strcpy(cmdLine, lineRead);
 }
 
-int existCommand() {
+// Check if entered command is allowed
+int existCommand(void) {
 
+    // Check that command is not empty
     if (cmdElems[0] == NULL) {
         return 0;
     }
 
+    // Loop on allowed commands and compare with the entered one.
     int j = 0;
     for (j = 0; j < MAX - 1; j++) {
-        if (strings[j] == '\0')
-            break; // à ajouter pour éviter d'atteindre a fin de la chaine
-        //printf("%s      %s\n",strings[j],cmdElems[0]);
-        if (strcmp(cmdElems[0], strings[j]) == 0) {
+        if (allowedCommands[j] == '\0') {
+            break; // Last command is reached, stop process.
+        }
+
+        // If entered command is allowed the return 1.
+        if (strcmp(cmdElems[0], allowedCommands[j]) == 0) {
             return 1;
         }
     }
+
+    // Entered command is not found on allowed list
+    return 0;
 }
 
-int isExitCommand() {
+// Check if entered command is exit
+// If yes return 1
+// Else return 0
+int isExitCommand(void) {
     if (strcmp(cmdElems[0], "exit") == 0) {
         return 1;
     }
     return 0;
 }
 
-int isPwdCommand() {
+// Check if entered command is pwd
+// If yes return 1
+// Else return 0
+int isPwdCommand(void) {
     if (strcmp(cmdElems[0], "pwd") == 0) {
         return 1;
     }
     return 0;
 }
 
-int isCdCommand() {
+// Check if entered command is cd
+// If yes return 1
+// Else return 0
+int isCdCommand(void) {
     if (strcmp(cmdElems[0], "cd") == 0) {
         return 1;
     }
     return 0;
 }
 
-void separateCommand() {
+// Separate entered command line into command and arguments
+void separateCommand(void) {
 
+    // Pointer to the words of entered command line
     char* bufferPointer = cmdLine;
 
+    // loop until max of command elements is reached
     int i;
     for (i = 0; i <= MAX; i++) {
-        while (*bufferPointer && isspace(*bufferPointer))
-            bufferPointer++;
+        // loop on chars of entered command line until a non space is reached
+        while (*bufferPointer && isspace(*bufferPointer)) {
+            bufferPointer++; // move to next position
+        }
 
-        if (!*bufferPointer)
+        // Check made to stop the loop when end of entered command line is reached
+        if (!*bufferPointer) {
             break;
+        }
 
-        /* on se souvient du début de ce mot */
+        // Save the pointer position of the found word on the commands elements
         cmdElems[i] = bufferPointer;
 
-        /* cherche la fin du mot */
-        while (*bufferPointer && !isspace(*bufferPointer))
-            bufferPointer++; /* saute le mot */
+        // Loop on chars to detect the end of the word
+        while (*bufferPointer && !isspace(*bufferPointer)) {
+            bufferPointer++; // move to next position
+        }
 
-        /* termine le mot par un \0 et passe au suivant */
+        // if empty then end of word is reached , and then \0 is set.
+        // Then continue searching for other words contained on entered command line
         if (*bufferPointer) {
-            *bufferPointer = 0;
-            bufferPointer++;
+            *bufferPointer = 0; // Set end of word
+            bufferPointer++; // Continue to next words
         }
     }
 
+    // Set NULL value to determine then end of command elements
     cmdElems[i] = NULL;
 }
 
-void wait_l(pid_t pid) {
+// Wait for child process to end and suspend execution of current process
+// pid is the child process id to wait for
+void waitForPid(pid_t pid) {
     int status;
     while (waitpid(pid, &status, 0) < 0) {
-
-        if (WIFEXITED(status)) {
-            if (WEXITSTATUS(status) == 0) {
-            }
-            //printf("le fils s'est terminé normalement avec le code 0");
-            else {
-                continue;
-                printf("le fils s'est terminé avec le code %i",
-                        WEXITSTATUS(status));
-            }
-        } else
-            printf("terminaison par le signal %i\n", WTERMSIG(status));
-        break;
+        continue;
     }
 }
 
+// Execute the entered command in a separate process
+// result is the expected value to win the game
 void execCommand(char* result) {
+    // child process id
     pid_t pid;
-    int fp;
+    // execution result of the command
     char cmdOut[2048];
-    ///
+    // In and out file descriptors of the pipe
     int fd[2];
+    // Pipe creation for communication from the child process to the parent
     pipe(fd);
-    //char lu[10];
 
-    if (!cmdElems[0])
-        return;  // si le premier element est NULL on arrete
-    if (cmdElems[0] == NULL)
+    // Check that command is not empty
+    if (cmdElems[0] == NULL) {
         return;
+    }
 
-    // if (existCommand()==1) //ne fonctionne pas il faut trouver pourquoi
-    {
-        pid = fork();
-        if (pid == 0) {
+    // for current process
+    pid = fork();
 
-            close(fd[0]);
-            // on lie stdout à l'entrée du fils
-            dup2(fd[1], fileno(stdout));
-            //dup2(fd[1], fileno(stderr));
+    // If current process is the child one
+    if (pid == 0) {
+
+        close(fd[0]);
+        // link stdout to the pipe
+        dup2(fd[1], fileno(stdout));
+        // As stderr is not linked to the pipe, error messages are shown by the child process
+        close(fd[1]);
+        // execute entered command line
+        int i = execvp(cmdElems[0], cmdElems);
+        // if error occurred while executing the command
+        if (i < 0) {
             close(fd[1]);
-            int i = execvp(cmdElems[0], cmdElems);
-            if (i < 0) {
-                close(fd[1]);
-                printf("error");
-                exit(0);
-            }
-            //close(fd[1]);
-            exit(0);
-        } else {
-            close(fd[1]);
-
-            memset(&cmdOut[0], 0, sizeof(cmdOut));
-            int n;
-            while (n = read(fd[0], cmdOut, 2048) > 0) {
-                if (strcmp(cmdOut, "error") == 0) {
-                    return;
-                }
-
-                printf("%s", cmdOut);
-
-                if (strcmp(cmdOut, result) == 0) {
-                    printf("\n\nBravo! level ok.\n\n");
-                    exit(0);
-                }
-            }
-
-            waitpid(pid, 0, 0);
+            // Send error text to parent process
+            printf("error");
+            exit(EXIT_SUCCESS); // Exit child process
         }
+        exit(EXIT_SUCCESS); // Exit child process
+    } else { // Current process is the parent one
+        close(fd[1]);
+
+        // Clear content of cmdOut
+        memset(&cmdOut[0], 0, sizeof(cmdOut));
+
+        // Read messages from the child process
+        while (read(fd[0], cmdOut, 2048) > 0) {
+            // if message "error" the error message is shown by the child process so we nothing to do
+            if (strcmp(cmdOut, "error") == 0) {
+                return;
+            }
+
+            // print result of command line
+            printf("%s", cmdOut);
+
+            // check if command line output is the expected result to win the game
+            if (strcmp(cmdOut, result) == 0) {
+                printf("\n\nBravo! level ok.\n\n");
+                exit(EXIT_SUCCESS);
+            }
+        }
+
+        // Wait for child process
+        waitForPid(pid);
     }
 }
 
+// Change current working directory to dir
 int changeDir(char *dir) {
-    //faire les bons tests comme quoi on ne sort pas du repertoire de travail
     return chdir(dir);
 }
 
-void handlePwdCommand() {
+// Handle the pwd command
+void handlePwdCommand(void) {
     char cwd[1024];
+    // get the current working directory
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         printf("%s\n", cwd);
     } else {
@@ -197,58 +238,65 @@ void handlePwdCommand() {
     }
 }
 
-char* getRealPath(char* lastDir, char* curDir) {
+// Get the real path of entered one:
+// if path contains ../ the path is translated the real path
+// This function is used to check if path is inside the game root directory
+char* getRealPath(char* lastDir) {
+    // child process id
     pid_t pid;
+    // execution result of the command
     char cmdOut[2048];
-    ///
+    // In and out file descriptors of the pipe
     int fd[2];
+    // Pipe creation for communication from the child process to the parent
     pipe(fd);
+
+    // for current process
     pid = fork();
+
+    // If current process is the child one
     if (pid == 0) {
 
         close(fd[0]);
-        // on lie stdout à l'entrée du fils
+        // link stdout to the pipe
         dup2(fd[1], fileno(stdout));
 
         close(fd[1]);
 
-        char newDir[2048];
+        // Change working directory of child process
+        changeDir(lastDir);
 
-        strcpy(newDir, lastDir);
-        strcat(newDir, "/");
-        strcat(newDir, curDir);
-
-        changeDir(newDir);
-
+        // Get again the working directory : that translates entered path with .. to a real path
         char newChangedDir[2048];
         getcwd(newChangedDir, sizeof(newChangedDir));
         printf("%s", newChangedDir);
 
-        exit(0);
-    } else {
+        exit(EXIT_SUCCESS);
+    } else { // Current process is the parent one
         close(fd[1]);
 
         memset(&cmdOut[0], 0, sizeof(cmdOut));
         read(fd[0], cmdOut, 2048);
 
-        //printf("%s", cmdOut);
-
         waitpid(pid, 0, 0);
         return cmdOut;
     }
-
 }
 
-int isValidDirectory(char* dir){
+// Check if directory is valid : exists and rights ok
+int isValidDirectory(char* dir) {
     struct stat fileStat;
-        if(stat(dir,&fileStat) >= 0){
-            if(S_ISDIR(fileStat.st_mode) && (fileStat.st_mode & S_IWUSR)&&(fileStat.st_mode & S_IXUSR)){
-                return 1;
-            }
+    if (stat(dir, &fileStat) >= 0) {
+        if (S_ISDIR(fileStat.st_mode) && (fileStat.st_mode & S_IWUSR)
+                && (fileStat.st_mode & S_IXUSR)) {
+            return 1;
         }
+    }
     return 0;
 }
 
+// check that first contains second text
+// this function is used to check that we did not leave game root directory
 int startsWith(const char *first, const char *second) {
     size_t firstSize, secondSize;
 
@@ -261,179 +309,211 @@ int startsWith(const char *first, const char *second) {
     return 0;
 }
 
-void handleCdCommand() {
+// Handle the cd command
+void handleCdCommand(void) {
+    // Get the current working directory
     char lastDir[1024];
     getcwd(lastDir, sizeof(lastDir));
 
+    // If no path is entered after the cd command then move to game's root directory
     if (cmdElems[1] == NULL) {
         changeDir(rwd);
     } else {
 
         char *currDir;
 
-        /* get the first token */
+        // get the first element of the path
         currDir = strtok(cmdElems[1], "/");
 
         char* lastDirPtr = &lastDir[0];
 
-        /* walk through other tokens */
+        // Loop on directory elements : this is used to check all crossed directories
         while (currDir != NULL) {
-            //printf(" %s\n", currDir);
 
-            lastDirPtr = getRealPath(lastDirPtr, currDir);
+            strcat(lastDirPtr, "/");
+            strcat(lastDirPtr, currDir);
 
-            if(startsWith(lastDirPtr,rwd) != 1){ // on a quitté la racin du jeu.
-                printf("You can not leave the root directory!\n");
+            // Check that directory is valid
+            if (isValidDirectory(lastDirPtr) != 1) {
+                printf("No access rights or folder does not exist :\n %s\n",
+                        lastDirPtr);
                 return;
             }
 
-            if(isValidDirectory(lastDirPtr) !=1){ // on a vérifie le dossier
-                printf("No access rights on folder \n : %s\n",lastDir);
+            // get path without ..
+            lastDirPtr = getRealPath(lastDirPtr);
+
+            // Check that we did not leave the root directory of the game
+            if (startsWith(lastDirPtr, rwd) != 1) {
+                printf("You can not leave the root directory!\n");
                 return;
             }
 
             currDir = strtok(NULL, "/");
         }
+        // If all path elements are ok the change current working directory
         changeDir(lastDirPtr);
     }
+}
 
+// Show instructions
+void showInstructions(void) {
+    printf("The only authorized commands are:\n");
+    int i;
+    for (i = 0; allowedCommands[i] != '\0'; i++) {
+        printf("%d : %s   \n", i, allowedCommands[i]);
+    }
 }
 
 int main(int argc, char *argv[]) {
 
     int i = 0;
+    // commands used to extract content of archive file
     char* args[7];
     args[0] = "tar";
     args[1] = "xzvf";
-    args[2] = argv[1];
+    args[2] = argv[1]; // the argument of program is the archive file name
     args[3] = "-C";
     args[4] = "./lol";
     args[5] = NULL;
 
+    // file used to read content of meta file
     FILE *fp;
+    // line of meta file
     char *line = NULL;
+    // result expected to win the game
     char *result = NULL;
+
     size_t len = 10;
     ssize_t read;
+    int result_code;
 
+    // check that game root does not exist
     if (!(folderExists("lol"))) {
 
-        mode_t mask = umask(0); //on met le umask à 0 (pas de restrictions)
-        result_code = mkdir("lol", 0700); //on crée le répertoire
-        umask(mask); //on remet les droits initiaux
+        mode_t mask = umask(0); // set umask to 0 (no restrictions)
+        result_code = mkdir("lol", 0700); // Create root directory of the game
+        umask(mask); // Reset the umask
     } else {
         result_code = 0;
     }
+
+    // Check result code of directory creation
     switch (result_code) {
 
+    // error creating the directory
     case -1:
 
         perror(argv[0]);
-        printf(
-                "Erreur dans la création du répertoire à noter que le réprtoire n'existe pas\n");
+        printf("Error creating the root directory\n");
         exit(EXIT_FAILURE);
         break;
 
+        // creation ok
     case 0:
 
-        printf("Le répertoire a bien été crée \n");
+        printf("Directory successfully created \n");
 
+        // id of the child directory used to extract content of archive file
         pid_t pid;
-        int status;
 
-        if ((pid = fork()) < 0) {
-            printf("Erreur dans le fork\n");
-            exit(1);
-        } else if (pid == 0) {
-            //chdir("/home/kejji/proj/lol");
-            if (execvp(*args, args) < 0) {
-                printf("Erreur dans exec\n");
-                exit(1);
+        // fork current process
+        if ((pid = fork()) < 0) { // Error to fork process
+            printf("Error while creating fork of current process\n");
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) { // current process is the child one
+            // extract content of the archive file
+            if (execvp(*args, args) < 0) { // if error occurred
+                printf("Error extracting archive file\n");
+                exit(EXIT_FAILURE);
             }
 
         } else {
-            while (wait(&status) != pid)
-                ;
+            // Wait for child process to terminate
+            waitForPid(pid);
         }
 
+        // Change working directory to the root directory of the game
         if (changeDir("./lol/") != 0) {
-            printf("Erreur d'acces au repertoire\n");
+            printf("Error to change working directory \n");
             exit(EXIT_FAILURE);
             break;
         }
 
+        // Save current working directory to rwd
         getcwd(rwd, sizeof(rwd));
 
-        fp = fopen("./meta", "r"); //on ouvre le fichier à lire dans fp
+        fp = fopen("./meta", "r"); //open file for reading
         if (fp == NULL) {
-            fprintf(stderr, "Erreur dans l'ouverture du fichier\n");
+            fprintf(stderr, "Error opening file \n");
             exit(EXIT_FAILURE);
         }
 
-        while ((read = getline(&line, &len, fp)) != -1) //getline() fait un malloc automatique pour line
-        {
-
+        // Read lines of meta file
+        while ((read = getline(&line, &len, fp)) != -1) {
+            // If line starts with # then ignore it and pass to next line
             if (strchr(line, '#') != NULL) {
-
+                continue;
             }
-
+            // Line starts with $ means that it's an allowed command
             else if (strchr(line, '$') != NULL) {
-                strings[i] = strdup(line + 2);
-                strings[i] = strtok(strings[i], "\n");
+                allowedCommands[i] = strdup(line + 2);
+                allowedCommands[i] = strtok(allowedCommands[i], "\n");
                 i++;
-
             }
-
+            // Line starts with > means that it's the expected result to win
             else if (strchr(line, '>') != NULL) {
                 result = strdup(line + 2);
-                //result = strtok(result, "\n");
-
             }
 
         }
-        strings[i] = "cd";
 
-        unlink("./meta"); // il reste à gérer correctement le répertoire de travail!!!
+        // Remove meta file
+        unlink("./meta");
         fclose(fp);
         free(line);
-        //free(result);
 
         break;
 
     default:
-
         break;
 
     }
 
     while (1) {
-        showPrompt();
+        // Read user input command
         getCommand();
-        separateCommand(); //(ligne, elems, MAXELEMS);
+        // Separate entered line to command and arguments
+        separateCommand();
+        //If command is empty
+        if (cmdElems[0] == NULL) {
+            //show command instructions
+            showInstructions();
+            continue;
+        }
 
+        // Check is entered command is pwd
         if (isPwdCommand() == 1) {
             handlePwdCommand();
             continue;
         }
 
+        // Check is entered command is cd
         if (isCdCommand() == 1) {
             handleCdCommand();
             continue;
         }
 
+        // Check is entered command is exit
         if (isExitCommand() == 1) {
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
 
-        if (existCommand() == 1) // si cette commande est valide, l'exécuter sinn inviter le joueur à reintroduire une autre commande
-                {
-            //printf("lol_99\n");
+        // Check is command is allowed if yes process it, else show instructions
+        if (existCommand() == 1) {
             execCommand(result);
         } else {
-            printf("Les seules commandes autorisées sont :\n");
-            for (i = 0; strings[i] != '\0'; i++) {
-                printf("%d : %s   \n", i, strings[i]);
-            }
+            showInstructions();
         }
 
     }
