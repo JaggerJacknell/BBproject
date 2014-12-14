@@ -27,6 +27,12 @@ char *cmdElems[MAX];
 // root working directory of the Game : we can not leave this directory
 char rwd[1024];
 
+// variable to check if current command is a redirection
+int isRedirectionCmd;
+
+// File result of redirection
+char *redirectionFile;
+
 // Check if a folder exists
 // This check is used before creating the Game working directory
 // to avoid the creation of an already created directory
@@ -111,6 +117,42 @@ int isCdCommand(void) {
 // Separate entered command line into command and arguments
 void separateCommand(void) {
 
+    // initialize redirection variables
+    redirectionFile = NULL;
+    isRedirectionCmd = 0;
+    // Check if command line is a redirection
+    if (strstr(cmdLine, ">") != NULL) {
+        isRedirectionCmd = 1;
+
+        char *cmdParts[20];
+        char *currPart;
+        int i = 0;
+
+        // get the first element of the path
+        currPart = strtok(cmdLine, ">");
+
+        cmdParts[i] = currPart;
+
+        // Loop on command elements : this is used to get command and file of redirection
+        while (currPart != NULL) {
+
+            i++;
+            currPart = strtok(NULL, ">");
+            cmdParts[i] = currPart;
+        }
+        cmdParts[i + 1] = NULL;
+
+        if (i != 2) {
+            printf("Invalid Command!");
+            cmdElems[0] = NULL;
+            return;
+        }
+
+        strcpy(cmdLine, cmdParts[0]);
+        //cmdLine = cmdParts[0];
+        redirectionFile = cmdParts[1];
+    }
+
     // Pointer to the words of entered command line
     char* bufferPointer = cmdLine;
 
@@ -148,12 +190,25 @@ void separateCommand(void) {
 }
 
 // Wait for child process to end and suspend execution of current process
-// pid is the child process id to wait for
+// pid is the chikd process id to wait for
 void waitForPid(pid_t pid) {
     int status;
     while (waitpid(pid, &status, 0) < 0) {
         continue;
     }
+}
+
+//Handle Ctrl+C signal
+void sigintHandler(int sig_num) {
+    printf("error");
+    fflush(stdout);
+    exit(EXIT_SUCCESS);
+}
+
+//Handle Ctrl+C signal on parent process
+void sigintParentHandler(int sig_num) {
+    // remove current signal handler
+    signal(SIGINT, SIG_DFL);
 }
 
 // Execute the entered command in a separate process
@@ -178,6 +233,8 @@ void execCommand(char* result) {
 
     // If current process is the child one
     if (pid == 0) {
+        // Register signal on child process
+        signal(SIGINT, sigintHandler);
 
         close(fd[0]);
         // link stdout to the pipe
@@ -195,11 +252,25 @@ void execCommand(char* result) {
         }
         exit(EXIT_SUCCESS); // Exit child process
     } else { // Current process is the parent one
+
+        // Register signal on child process
+        signal(SIGINT, sigintParentHandler);
+
         close(fd[1]);
+
+        // file of redirection command
+        FILE *f;
+        // if current command is a redirection then open file
+        if (isRedirectionCmd == 1) {
+            f = fopen(redirectionFile, "w");
+            if (f == NULL) {
+                printf("Error opening file!\n");
+                return;
+            }
+        }
 
         // Clear content of cmdOut
         memset(&cmdOut[0], 0, sizeof(cmdOut));
-
         // Read messages from the child process
         while (read(fd[0], cmdOut, 2048) > 0) {
             // if message "error" the error message is shown by the child process so we nothing to do
@@ -207,14 +278,23 @@ void execCommand(char* result) {
                 return;
             }
 
-            // print result of command line
-            printf("%s", cmdOut);
+            // If current command is a redirection then redirect output to file
+            if (isRedirectionCmd == 1) {
+                fprintf(f, "%s", cmdOut);
+            } else {
+                // print result of command line
+                printf("%s", cmdOut);
 
-            // check if command line output is the expected result to win the game
-            if (strcmp(cmdOut, result) == 0) {
-                printf("\n\nBravo! level ok.\n\n");
-                exit(EXIT_SUCCESS);
+                // check if command line output is the expected result to win the game
+                if (strcmp(cmdOut, result) == 0) {
+                    printf("\n\nBravo! level ok.\n\n");
+                    exit(EXIT_SUCCESS);
+                }
             }
+        }
+
+        if (f != NULL) {
+            fclose(f);
         }
 
         // Wait for child process
@@ -512,6 +592,7 @@ int main(int argc, char *argv[]) {
         // Check is command is allowed if yes process it, else show instructions
         if (existCommand() == 1) {
             execCommand(result);
+            signal(SIGINT, SIG_DFL);
         } else {
             showInstructions();
         }
