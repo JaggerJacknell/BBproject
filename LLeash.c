@@ -1,3 +1,4 @@
+
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -207,8 +208,8 @@ void sigintHandler(int sig_num) {
 
 //Handle Ctrl+C signal on parent process
 void sigintParentHandler(int sig_num) {
-    // remove current signal handler
-    signal(SIGINT, SIG_DFL);
+    // block ctrl+c and remove the printer char ^C
+    printf("\b \b\b \b\0");
 }
 
 // Execute the entered command in a separate process
@@ -252,9 +253,6 @@ void execCommand(char* result) {
         }
         exit(EXIT_SUCCESS); // Exit child process
     } else { // Current process is the parent one
-
-        // Register signal on child process
-        signal(SIGINT, sigintParentHandler);
 
         close(fd[1]);
 
@@ -447,6 +445,9 @@ void showInstructions(void) {
 
 int main(int argc, char *argv[]) {
 
+    // Register signal on child process
+    signal(SIGINT, sigintParentHandler);
+
     int i = 0;
     // commands used to extract content of archive file
     char* args[7];
@@ -592,7 +593,7 @@ int main(int argc, char *argv[]) {
         // Check is command is allowed if yes process it, else show instructions
         if (existCommand() == 1) {
             execCommand(result);
-            signal(SIGINT, SIG_DFL);
+            //signal(SIGINT, SIG_DFL);
         } else {
             showInstructions();
         }
