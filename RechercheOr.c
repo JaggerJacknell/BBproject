@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include  <sys/types.h>
-#include  <unistd.h>
+#include <errno.h>
 
 int main(){
 	
@@ -33,22 +32,18 @@ int main(){
 		}
 		CommArgv2[5-i-1]=NULL;
 		
-		pid_t child_pid;
-		child_pid = fork ();
-		if (child_pid != 0){
-			// Nous sommes dans le processus parent.
-			execvp(CommArgv1[0],CommArgv1);
-			// On ne sort de la fonction execvp uniquement si une erreur survient.
-			fprintf (stderr, "une erreur est survenue au sein de execvp\n");
-			abort ();
+		if (fork() == 0){
+			//do child stuff here
+			execvp(CommArgv1[0],CommArgv1); /*since you want to return errno to parent do a simple exit call with the errno*/
+			exit(errno);
 		} else {
-			// Nous sommes dans le processus fils.
-			execvp(CommArgv2[0],CommArgv2);
-			// On ne sort de la fonction execvp uniquement si une erreur survient.
-			fprintf (stderr, "une erreur est survenue au sein de execvp\n");
-			abort ();
+			//parent stuff
+			int status;
+			wait(&status);       /*you made a exit call in child you need to wait on exit status of child*/
+			if(WIFEXITED(status))
+			//printf("child exited with = %d\n",WEXITSTATUS(status));
+			if (WEXITSTATUS(status)!=0) {execvp(CommArgv2[0],CommArgv2);}
 		}
-		
+      
 	}
-	
 }

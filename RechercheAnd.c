@@ -1,9 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
-int main(){
+void rechercheAnd(){
 	
-	//char * CommArgv[5]={"rrt","fg","sdcf","&&","fg"}; C'est pour l'exemple
+	char * CommArgv[5]={"cat","file1.txt","&&","cat","file3.txt"}; //C'est pour l'exemple
 	
 	int andFound=0;
 	int i=0;
@@ -19,24 +20,39 @@ int main(){
 	//printf("i=%d andFound=%d\n",i,andFound);
 	
 	if (andFound) {
-		char * CommArgv1[i];
+		char * CommArgv1[i+1];
 		int j;
 		for (j=0; j<i;j++){
 			CommArgv1[j]=CommArgv[j];
 		}
-		char * CommArgv2[5-i-1]; //Changer 5 s'il faut
+		CommArgv1[i]=NULL;
+		char * CommArgv2[5-i-1+1]; //Changer 5 s'il faut
 		for (j=i+1; j<5;j++){
 			CommArgv2[j-i-1]=CommArgv[j];
 		}
+		CommArgv2[5-i-1]=NULL;
 		
-		int result=1;
+		/*int l=0;
+		while (CommArgv1[l]!=NULL) {
+			printf("%s\n",CommArgv1[l]);
+			l++;
+		}*/
 		
-		if (execvp(CommArgv1)==0) {
-			execvp(CommArgv2);
-			result=0;
+		if (fork() == 0){
+			//do child stuff here
+			execvp(CommArgv1[0],CommArgv1); /*since you want to return errno to parent do a simple exit call with the errno*/
+			exit(errno);
+		} else {
+			//parent stuff
+			int status;
+			wait(&status);       /*you made a exit call in child you need to wait on exit status of child*/
+			if(WIFEXITED(status))
+			//printf("child exited with = %d\n",WEXITSTATUS(status));
+			if (WEXITSTATUS(status)==0) {execvp(CommArgv2[0],CommArgv2);}
 		}
-		
-		exit(result);
 	}
-	
+}
+
+int main(){
+	rechercheAnd();
 }
